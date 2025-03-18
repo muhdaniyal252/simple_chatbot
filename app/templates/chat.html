@@ -1,0 +1,195 @@
+{% extends "base.html" %}
+
+{% block title %}Chat - {{ current_chat.title }}{% endblock %}
+
+{% block content %}
+<div class="chat-container">
+    <div class="chat-header">
+        <h2>{{ current_chat.title }}</h2>
+    </div>
+    
+    <div class="chat-messages" id="chat-messages">
+        {% for message in messages %}
+            <div class="message {% if message.is_user %}user-message{% else %}ai-message{% endif %}">
+                <div class="message-avatar">
+                    {% if message.is_user %}
+                        <i class="fas fa-user"></i>
+                    {% else %}
+                        <i class="fas fa-robot"></i>
+                    {% endif %}
+                </div>
+                <div class="message-content">
+                    <div class="message-text">
+                        <div class="markdown-body">{{ message.content }}</div>
+                    </div>
+                    <div class="message-time">{{ message.formatted_timestamp }}</div>
+                </div>
+            </div>
+        {% endfor %}
+    </div>
+    
+    <div class="chat-input">
+        <form id="message-form">
+            <div class="input-group">
+                <textarea class="form-control" id="user-message" placeholder="Type your message here... (Shift+Enter to send)" rows="1" required></textarea>
+                <input type="hidden" id="chat-id" value="{{ current_chat.id }}">
+                <button class="btn btn-primary" type="submit">
+                    <i class="fas fa-paper-plane"></i>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    $(document).ready(function() {
+        // Process markdown in all messages that haven't been processed yet
+        function renderMarkdown() {
+            $('.markdown-body:not(.rendered)').each(function() {
+                const content = $(this).text();
+                $(this).html(marked.parse(content));
+                $(this).addClass('rendered'); // Mark as rendered
+            });
+        }
+        
+        // Render markdown on page load
+        renderMarkdown();
+        
+        // Auto-resize textarea as user types
+        const userMessageInput = document.getElementById('user-message');
+        userMessageInput.addEventListener('input', function() {
+            this.style.height = 'auto';
+            this.style.height = (this.scrollHeight) + 'px';
+        });
+        
+        // Handle key presses in textarea
+        $('#user-message').on('keydown', function(e) {
+            if (e.key === 'Enter') {
+                if (e.shiftKey) {
+                    // Shift+Enter was pressed - submit form
+                    $('#message-form').submit();
+                    e.preventDefault();
+                }
+                // Regular Enter just creates a new line - default behavior
+            }
+        });
+        
+        // Scroll to bottom of chat
+        function scrollToBottom() {
+            const chatMessages = document.getElementById('chat-messages');
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+        
+        // Scroll to bottom on page load
+        scrollToBottom();
+        
+        // Handle form submission
+        $('#message-form').submit(function(e) {
+            e.preventDefault();
+            
+            const userMessage = $('#user-message').val();
+            const chatId = $('#chat-id').val();
+            
+            if (userMessage.trim() === '') return;
+            
+            // Add user message to chat immediately
+            $('#chat-messages').append(`
+                <div class="message user-message">
+                    <div class="message-avatar">
+                        <i class="fas fa-user"></i>
+                    </div>
+                    <div class="message-content">
+                        <div class="message-text">
+                            <div class="markdown-body">${userMessage}</div>
+                        </div>
+                        <div class="message-time">Just now</div>
+                    </div>
+                </div>
+            `);
+            
+            // Add loading indicator
+            const loadingId = 'loading-' + Date.now();
+            $('#chat-messages').append(`
+                <div class="message ai-message" id="${loadingId}">
+                    <div class="message-avatar">
+                        <i class="fas fa-robot"></i>
+                    </div>
+                    <div class="message-content">
+                        <div class="message-text">
+                            <div class="typing-indicator">
+                                <span></span>
+                                <span></span>
+                                <span></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `);
+            
+            // Process markdown in the user message
+            renderMarkdown();
+            
+            scrollToBottom();
+            
+            // Clear input and reset height
+            $('#user-message').val('');
+            $('#user-message').css('height', 'auto');
+            
+            // Send message to server
+            $.ajax({
+                url: '{{ url_for("main.send_message") }}',
+                method: 'POST',
+                data: {
+                    message: userMessage,
+                    chat_id: chatId
+                },
+                success: function(response) {
+                    // Remove loading indicator
+                    $(`#${loadingId}`).remove();
+                    
+                    // Add AI response with markdown processing
+                    $('#chat-messages').append(`
+                        <div class="message ai-message">
+                            <div class="message-avatar">
+                                <i class="fas fa-robot"></i>
+                            </div>
+                            <div class="message-content">
+                                <div class="message-text">
+                                    <div class="markdown-body">${response.ai_response}</div>
+                                </div>
+                                <div class="message-time">Just now</div>
+                            </div>
+                        </div>
+                    `);
+                    
+                    // Process markdown in the new message
+                    renderMarkdown();
+                    
+                    scrollToBottom();
+                },
+                error: function() {
+                    // Remove loading indicator
+                    $(`#${loadingId}`).remove();
+                    
+                    // Show error message
+                    $('#chat-messages').append(`
+                        <div class="message ai-message">
+                            <div class="message-avatar">
+                                <i class="fas fa-robot"></i>
+                            </div>
+                            <div class="message-content">
+                                <div class="message-text">Sorry, I encountered an error. Please try again.</div>
+                                <div class="message-time">Just now</div>
+                            </div>
+                        </div>
+                    `);
+                    
+                    scrollToBottom();
+                }
+            });
+        });
+    });
+</script>
+{% endblock %}

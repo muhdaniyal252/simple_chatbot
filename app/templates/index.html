@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+
+{% block title %}Smart Chatbot - Home{% endblock %}
+
+{% block content %}
+<div class="welcome-screen">
+    <div class="welcome-content">
+        <h1>Welcome to Smart Chatbot</h1>
+        <p class="lead">Start a conversation with our AI assistant</p>
+        <a href="{{ url_for('main.new_chat') }}" class="btn btn-lg btn-primary">
+            <i class="fas fa-comment"></i> Start New Chat
+        </a>
+    </div>
+</div>
+{% endblock %}
